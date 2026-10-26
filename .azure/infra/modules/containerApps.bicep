@@ -160,7 +160,7 @@ resource web 'Microsoft.App/containerApps@2025-01-01' = {
   }
 }
 
-// Disparado pelo pipeline antes de trocar a imagem da Api (scripts/ci/run-migrations.sh).
+// Disparado pelo pipeline antes de trocar a imagem da Api (scripts/ci/deploy.sh).
 resource migrations 'Microsoft.App/jobs@2025-01-01' = {
   name: 'caj-${name}-migrate'
   location: location
