@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+artifacts/
+tests/
+.env
+.git/
+.vs/
+.vscode/
+*.md
+frontend/

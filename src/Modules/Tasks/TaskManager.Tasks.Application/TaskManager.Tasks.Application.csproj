@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../TaskManager.Tasks.Domain/TaskManager.Tasks.Domain.csproj" />
+    <ProjectReference Include="../../Auth/TaskManager.Auth.Contracts/TaskManager.Auth.Contracts.csproj" />
+    <ProjectReference Include="../../../Shared/TaskManager.Shared.Application/TaskManager.Shared.Application.csproj" />
+  </ItemGroup>
+
+</Project>

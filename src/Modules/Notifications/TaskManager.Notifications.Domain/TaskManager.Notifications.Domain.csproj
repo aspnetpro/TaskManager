@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="../../../Shared/TaskManager.Shared.Domain/TaskManager.Shared.Domain.csproj" />
+  </ItemGroup>
+
+</Project>

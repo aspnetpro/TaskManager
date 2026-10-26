@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+
+  <ItemGroup>
+    <ProjectReference Include="../TaskManager.Tasks.Application/TaskManager.Tasks.Application.csproj" />
+    <ProjectReference Include="../TaskManager.Tasks.Contracts/TaskManager.Tasks.Contracts.csproj" />
+    <ProjectReference Include="../../../Shared/TaskManager.Shared.Infrastructure/TaskManager.Shared.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

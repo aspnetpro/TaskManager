@@ -1,0 +1,8 @@
+# Scripts e Dockerfiles rodam em Linux (agentes de CI, containers): sempre LF,
+# mesmo com checkout no Windows (core.autocrlf=true transformaria em CRLF e quebraria o shell).
+* text=auto
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.bicep text eol=lf
+*.bicepparam text eol=lf
+*.yml text eol=lf

@@ -1,0 +1,74 @@
+# Template: a imagem do nginx troca ${API_HOST}, ${API_PORT}, ${API_SCHEME} e
+# ${NGINX_LOCAL_RESOLVERS} pelos valores do ambiente no startup. Variáveis do próprio
+# nginx ($host, $uri...) não são tocadas (o envsubst só troca o que existe no ambiente).
+
+# Pool de conexões com a Api. Sem keepalive, cada request abre um TCP novo: sob carga
+# (~300 req/s no stress test) as portas efêmeras acabam em TIME_WAIT e o nginx responde
+# 502 com "connect() failed (99: Address not available)" — com a Api saudável.
+upstream api {
+    zone api 64k;
+    # resolve (nginx >= 1.27.3): DNS reavaliado em runtime. O nginx sobe mesmo com a Api
+    # fora do ar e acompanha o IP novo quando o container da Api muda.
+    # Resolver = /etc/resolv.conf do container (NGINX_ENTRYPOINT_LOCAL_RESOLVERS):
+    # 127.0.0.11 no Docker, o DNS do ambiente no Container Apps. A mesma imagem serve nos dois.
+    # CUIDADO: nome que o DNS interno não conhece é repassado ao DNS externo. Por isso o
+    # host é sempre qualificado (.internal no compose, FQDN interno no Azure), nunca um
+    # nome curto como "api", que com o sufixo DNS da rede local pode virar um domínio público.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s ipv6=off;
+    server ${API_HOST}:${API_PORT} resolve;
+    keepalive 32;
+}
+
+server {
+    listen 8080;
+    server_name _;
+    root /usr/share/nginx/html;
+    server_tokens off;
+
+    # Mesmo limite da Api (Kestrel MaxRequestBodySize): corta o abuso já na borda.
+    client_max_body_size 1m;
+
+    gzip on;
+    gzip_min_length 1024;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    # Comum ao /api/ e ao /healthz. Todos os proxy_set_header ficam AQUI: um único
+    # proxy_set_header dentro de um location descarta todos os herdados do server.
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    # Host = o da Api, não o do frontend: o ingress do Container Apps roteia pelo Host
+    # (e o SNI precisa bater com o certificado do ingress interno).
+    proxy_set_header Host ${API_HOST};
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_ssl_server_name on;
+    proxy_ssl_name ${API_HOST};
+
+    location /api/ {
+        proxy_pass ${API_SCHEME}://api;
+    }
+
+    # Teste de disponibilidade (Cap. 14) e smoke test do deploy: nginx + Api de pé.
+    # /health/live é barato (não toca o banco); se o readiness da Api falhar, o ingress
+    # tira a réplica e esta rota devolve 502/503 do mesmo jeito.
+    location = /healthz {
+        access_log off;
+        proxy_pass ${API_SCHEME}://api/health/live;
+    }
+
+    # Arquivos com hash no nome (Vite): nunca mudam, cache de 1 ano.
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # SPA: rota desconhecida cai no index.html, que nunca é cacheado
+    # (senão o deploy novo só aparece quando o cache do navegador expira).
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri /index.html;
+    }
+}

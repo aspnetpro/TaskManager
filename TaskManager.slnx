@@ -1,0 +1,38 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TaskManager.Api/TaskManager.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/" />
+  <Folder Name="/src/Modules/Auth/">
+    <Project Path="src/Modules/Auth/TaskManager.Auth.Application/TaskManager.Auth.Application.csproj" />
+    <Project Path="src/Modules/Auth/TaskManager.Auth.Contracts/TaskManager.Auth.Contracts.csproj" />
+    <Project Path="src/Modules/Auth/TaskManager.Auth.Domain/TaskManager.Auth.Domain.csproj" />
+    <Project Path="src/Modules/Auth/TaskManager.Auth.Infrastructure/TaskManager.Auth.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Notifications/">
+    <Project Path="src/Modules/Notifications/TaskManager.Notifications.Application/TaskManager.Notifications.Application.csproj" />
+    <Project Path="src/Modules/Notifications/TaskManager.Notifications.Domain/TaskManager.Notifications.Domain.csproj" />
+    <Project Path="src/Modules/Notifications/TaskManager.Notifications.Infrastructure/TaskManager.Notifications.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/Tasks/">
+    <Project Path="src/Modules/Tasks/TaskManager.Tasks.Application/TaskManager.Tasks.Application.csproj" />
+    <Project Path="src/Modules/Tasks/TaskManager.Tasks.Contracts/TaskManager.Tasks.Contracts.csproj" />
+    <Project Path="src/Modules/Tasks/TaskManager.Tasks.Domain/TaskManager.Tasks.Domain.csproj" />
+    <Project Path="src/Modules/Tasks/TaskManager.Tasks.Infrastructure/TaskManager.Tasks.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/src/Shared/">
+    <Project Path="src/Shared/TaskManager.Shared.Application/TaskManager.Shared.Application.csproj" />
+    <Project Path="src/Shared/TaskManager.Shared.Domain/TaskManager.Shared.Domain.csproj" />
+    <Project Path="src/Shared/TaskManager.Shared.Infrastructure/TaskManager.Shared.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/TaskManager.DbAccess/TaskManager.DbAccess.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TaskManager.Api.IntegrationTests/TaskManager.Api.IntegrationTests.csproj" />
+    <Project Path="tests/TaskManager.ArchitectureTests/TaskManager.ArchitectureTests.csproj" />
+    <Project Path="tests/TaskManager.Auth.UnitTests/TaskManager.Auth.UnitTests.csproj" />
+    <Project Path="tests/TaskManager.Notifications.UnitTests/TaskManager.Notifications.UnitTests.csproj" />
+    <Project Path="tests/TaskManager.Tasks.UnitTests/TaskManager.Tasks.UnitTests.csproj" />
+  </Folder>
+</Solution>

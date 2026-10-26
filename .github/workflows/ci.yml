@@ -1,0 +1,85 @@
+# CI (Cap. 13.7): build, testes e segurança. Roda em PR e é reaproveitado pelo cd.yml.
+# Mesmos passos do Azure DevOps, chamando os mesmos scripts em scripts/ci/.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_NOLOGO: "true"
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: "**/*.csproj"
+
+      - run: dotnet build TaskManager.slnx -c Release
+      - name: dotnet test + cobertura (75% global, 90% Tasks.Domain)
+        run: bash scripts/ci/coverage.sh
+      - name: Resumo de cobertura
+        if: always()
+        run: cat coverage/report/SummaryGithub.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Scripts SQL das migrations
+        run: |
+          set -euo pipefail
+          dotnet tool restore
+          mkdir -p migrations-sql
+          for module in Auth Tasks Notifications; do
+            dotnet ef migrations script --idempotent --no-build --configuration Release \
+              --project src/Modules/$module/TaskManager.$module.Infrastructure \
+              --startup-project src/TaskManager.Api \
+              --context ${module}DbContext \
+              -o migrations-sql/$module.sql
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: migrations-sql
+          path: migrations-sql/
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # gitleaks varre o histórico inteiro
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: global.json
+      - run: bash scripts/ci/check-vulnerable-packages.sh
+      - run: npm audit --omit=dev --audit-level=high
+        working-directory: frontend
+      - name: Segredos no histórico (gitleaks)
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1 git /repo --redact --exit-code 1

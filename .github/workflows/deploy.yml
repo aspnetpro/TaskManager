@@ -1,0 +1,38 @@
+# Deploy de um ambiente (reutilizável). A regra de proteção (aprovação) mora no
+# GitHub Environment de mesmo nome; a lógica mora em scripts/ci/deploy.sh.
+name: deploy
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      resource-group:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Migrations → Api → web → smoke test (rollback se falhar)
+        run: >
+          bash scripts/ci/deploy.sh
+          ${{ inputs.environment }}
+          ${{ inputs.resource-group }}
+          ${{ vars.ACR_LOGIN_SERVER }}
+          ${{ github.sha }}

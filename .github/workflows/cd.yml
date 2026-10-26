@@ -1,0 +1,76 @@
+# CD (Cap. 13.7): push na main → CI → imagens no ACR → staging → produção.
+# Produção espera aprovação: GitHub Environment "production" com required reviewers
+# (Settings → Environments). Login no Azure por OIDC (federated credential): sem segredo.
+# vars.* são variáveis do repositório/ambiente (não secrets): ids não são credenciais.
+name: cd
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false   # nunca matar um deploy no meio
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  images:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGISTRY: ${{ vars.ACR_LOGIN_SERVER }}
+      TAG: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: docker build (api, web, migrations)
+        run: |
+          set -euo pipefail
+          docker build --target runtime    --build-arg SOURCE_REVISION="$TAG" -t "$REGISTRY/taskmanager-api:$TAG" .
+          docker build --target migrations --build-arg SOURCE_REVISION="$TAG" -t "$REGISTRY/taskmanager-migrations:$TAG" .
+          docker build                     --build-arg SOURCE_REVISION="$TAG" -t "$REGISTRY/taskmanager-web:$TAG" frontend
+      - name: Trivy (CRITICAL/HIGH com correção disponível)
+        run: |
+          set -euo pipefail
+          for target in api web migrations; do
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.76.0 \
+              image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 --no-progress \
+              "$REGISTRY/taskmanager-$target:$TAG"
+          done
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Push para o ACR
+        run: |
+          set -euo pipefail
+          az acr login --name "${REGISTRY%%.*}"
+          for target in api web migrations; do docker push "$REGISTRY/taskmanager-$target:$TAG"; done
+
+  staging:
+    needs: images
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: staging
+      resource-group: rg-taskmanager-staging
+
+  production:
+    needs: staging
+    uses: ./.github/workflows/deploy.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      environment: production
+      resource-group: rg-taskmanager-production

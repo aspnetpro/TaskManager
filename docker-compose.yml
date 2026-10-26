@@ -1,0 +1,107 @@
+# Dev local. `docker compose up -d` sobe as dependências (SQL Server, Redis e o Aspire
+# Dashboard para logs, traces e métricas) para rodar a Api com `dotnet run`.
+# `docker compose --profile app up -d --build` sobe a Api e o frontend
+# (http://localhost:3000) em container também. Segredos vêm do .env (fora do Git).
+# Portas publicadas só em 127.0.0.1: nada disso deve ficar exposto na rede do café.
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: taskmanager-sql
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Defina MSSQL_SA_PASSWORD no arquivo .env}
+    ports:
+      - "127.0.0.1:1433:1433"
+    volumes:
+      - sqldata:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -C -Q 'SELECT 1' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: taskmanager-redis
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Logs, traces e métricas via OTLP (Cap. 14). UI em http://localhost:18888.
+  # Sem autenticação: aceitável só porque a porta está presa em 127.0.0.1.
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:13.6
+    container_name: taskmanager-telemetry
+    environment:
+      ASPIRE_DASHBOARD_UNSECURED_ALLOW_ANONYMOUS: "true"
+    ports:
+      - "127.0.0.1:18888:18888"
+      # OTLP/gRPC para a Api rodando no host (dotnet run → http://localhost:4317).
+      - "127.0.0.1:4317:18889"
+
+  api:
+    profiles: ["app"]
+    build: .
+    container_name: taskmanager-api
+    networks:
+      default:
+        # Nome que o nginx usa. TLD .internal é reservado (ICANN) e nunca existe no DNS
+        # público: com a Api parada, o proxy dá 502 em vez de resolver "api" + sufixo DNS
+        # da rede local (ex.: api.box) e mandar o login para um servidor de terceiros.
+        aliases:
+          - api.taskmanager.internal
+    environment:
+      # Development: aplica migrations e semeia o workspace demo no startup.
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Database: "Server=sqlserver,1433;Database=TaskManager;User Id=sa;Password=${MSSQL_SA_PASSWORD};TrustServerCertificate=true"
+      ConnectionStrings__Redis: "redis:6379"
+      # Sem a chave a Api falha no startup (ValidateOnStart), com mensagem clara.
+      Jwt__SigningKey: ${JWT_SIGNING_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://aspire-dashboard:18889
+      # Teste de carga (tests/load): todos os usuários virtuais saem do mesmo IP.
+      RateLimiting__AuthPermitLimit: ${AUTH_PERMIT_LIMIT:-10}
+      RateLimiting__GlobalPermitLimit: ${GLOBAL_PERMIT_LIMIT:-100}
+    # Hardening: filesystem somente leitura, sem capabilities, sem escalar privilégio.
+    # O /tmp em memória é para o runtime (sockets de diagnóstico do .NET).
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    profiles: ["app"]
+    build: ./frontend
+    container_name: taskmanager-web
+    environment:
+      # nginx serve a SPA e faz proxy de /api para a Api: mesma origem, sem CORS.
+      API_HOST: api.taskmanager.internal
+      API_PORT: "8080"
+      API_SCHEME: http
+    # O entrypoint do nginx gera o default.conf a partir do template: só esse diretório
+    # e o /tmp (pid, buffers) precisam de escrita — ambos em memória, do usuário nginx (101).
+    read_only: true
+    tmpfs:
+      - /tmp:uid=101,gid=101
+      - /etc/nginx/conf.d:uid=101,gid=101
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "127.0.0.1:3000:8080"
+    depends_on:
+      - api
+
+volumes:
+  sqldata:

@@ -1,0 +1,134 @@
+// Dashboards do TaskManager (Cap. 14.4). Queries KQL sobre o Application Insights
+// (tabelas clássicas: requests, dependencies, customMetrics, traces). Cole cada bloco
+// num tile do Azure Dashboard ou num Workbook. Versionadas aqui para evoluir com o código.
+//
+// Telemetria via OpenTelemetry (Azure Monitor exporter):
+//   requests      → spans de servidor do ASP.NET Core (exceto /health) E spans Consumer do
+//                   Outbox ("outbox process <Módulo>"). Para HTTP, filtre isnotempty(url).
+//   dependencies  → SQL (SqlClient), HTTP de saída, casos de uso (TaskManager.Application), Outbox
+//   customMetrics → taskmanager.tasks.*, taskmanager.outbox.*, métricas de runtime/HTTP
+//   traces        → logs do Serilog (com TraceId: clique e chegue no trace)
+
+// ============================================================================
+// Painel 1 — Overview
+// ============================================================================
+
+// Requests por minuto
+requests
+| where timestamp > ago(24h) and isnotempty(url)
+| summarize requests = count() by bin(timestamp, 1m)
+| render timechart;
+
+// Taxa de erro (5xx) %
+requests
+| where timestamp > ago(24h) and isnotempty(url)
+| summarize errorRate = 100.0 * countif(toint(resultCode) >= 500) / count() by bin(timestamp, 5m)
+| render timechart;
+
+// Latência p50 / p95 / p99 (ms). Alvo do PRD: p95 < 200 ms.
+requests
+| where timestamp > ago(24h) and isnotempty(url)
+| summarize p50 = percentile(duration, 50), p95 = percentile(duration, 95), p99 = percentile(duration, 99)
+    by bin(timestamp, 5m)
+| render timechart;
+
+// Disponibilidade (teste de 3 regiões no /healthz), últimas 24 h
+availabilityResults
+| where timestamp > ago(24h)
+| summarize availability = round(100.0 * countif(success == true) / count(), 2);
+
+// ============================================================================
+// Painel 2 — Endpoints
+// ============================================================================
+
+// Top 10 por volume
+requests
+| where timestamp > ago(24h) and isnotempty(url)
+| summarize requests = count() by name
+| top 10 by requests;
+
+// Top 10 mais lentos (p95), com volume mínimo para não premiar endpoint chamado 2 vezes
+requests
+| where timestamp > ago(24h) and isnotempty(url)
+| summarize p95 = percentile(duration, 95), requests = count() by name
+| where requests >= 50
+| top 10 by p95;
+
+// Taxa de erro por endpoint (4xx de negócio separado de 5xx de sistema)
+requests
+| where timestamp > ago(24h) and isnotempty(url)
+| summarize total = count(),
+    clientErrors = countif(toint(resultCode) between (400 .. 499)),
+    serverErrors = countif(toint(resultCode) >= 500)
+    by name
+| extend serverErrorRate = round(100.0 * serverErrors / total, 2)
+| order by serverErrors desc;
+
+// Distribuição de status codes
+requests
+| where timestamp > ago(24h) and isnotempty(url)
+| summarize count() by resultCode
+| render piechart;
+
+// Erros de negócio mais comuns (tag result.error_code do TracingBehavior)
+dependencies
+| where timestamp > ago(24h)
+| where isnotempty(customDimensions["result.error_code"])
+| summarize occurrences = count() by errorCode = tostring(customDimensions["result.error_code"]), useCase = name
+| top 15 by occurrences;
+
+// ============================================================================
+// Painel 3 — Negócio
+// ============================================================================
+
+// Tarefas criadas por hora, por prioridade
+customMetrics
+| where timestamp > ago(7d) and name == "taskmanager.tasks.created"
+| summarize created = sum(valueSum) by bin(timestamp, 1h), priority = tostring(customDimensions["task.priority"])
+| render columnchart;
+
+// Tarefas concluídas por hora
+customMetrics
+| where timestamp > ago(7d) and name == "taskmanager.tasks.completed"
+| summarize completed = sum(valueSum) by bin(timestamp, 1h)
+| render columnchart;
+
+// Lead time médio (criação → Done), em horas, por prioridade
+customMetrics
+| where timestamp > ago(30d) and name == "taskmanager.tasks.lead_time"
+| summarize avgLeadTimeHours = round(sum(valueSum) / sum(valueCount) / 3600, 1)
+    by priority = tostring(customDimensions["task.priority"]);
+
+// Workspaces mais ativos: vem de LOG (UserId/WorkspaceId em toda request), não de métrica.
+// Workspace como tag de métrica explode a cardinalidade (e o custo) com o número de clientes.
+traces
+| where timestamp > ago(24h)
+| where customDimensions["RequestMethod"] == "POST" and customDimensions["RequestPath"] == "/api/v1/tasks"
+    and customDimensions["StatusCode"] == "201"
+| summarize created = count() by workspaceId = tostring(customDimensions["WorkspaceId"])
+| top 10 by created;
+
+// ============================================================================
+// Painel 4 — Infraestrutura
+// ============================================================================
+
+// SQL: p95 e volume por comando
+dependencies
+| where timestamp > ago(24h) and type == "SQL"
+| summarize p95 = percentile(duration, 95), calls = count() by bin(timestamp, 5m)
+| render timechart;
+
+// Outbox: atraso máximo (s) por módulo. Subindo = notificações atrasando.
+customMetrics
+| where timestamp > ago(24h) and name == "taskmanager.outbox.lag"
+| summarize maxLagSeconds = max(valueMax) by bin(timestamp, 5m), module = tostring(customDimensions["outbox.module"])
+| render timechart;
+
+// Outbox: mensagens por resultado (processed / failed / dead_letter)
+customMetrics
+| where timestamp > ago(24h) and name == "taskmanager.outbox.messages"
+| summarize messages = sum(valueSum) by bin(timestamp, 15m), outcome = tostring(customDimensions["outbox.outcome"])
+| render columnchart;
+
+// CPU, memória e réplicas da Api: métricas da plataforma (Container Apps → Metrics),
+// e DTU do Azure SQL: métrica do banco. Fixe os gráficos do portal no mesmo dashboard.

@@ -1,0 +1,11 @@
+# Regras padrão do gitleaks + exceções pontuais. Toda exceção diz por que não é segredo.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Arquivo de exemplo: só placeholders (o .env real está no .gitignore)"
+paths = ['''(^|/)\.env\.example$''']
+
+[[allowlists]]
+description = "ID de role built-in do Azure (Key Vault Secrets User): público, está na documentação da Microsoft"
+regexes = ['''4633458b-17de-408a-b874-0445c86b69e6''']

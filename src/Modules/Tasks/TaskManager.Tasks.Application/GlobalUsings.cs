@@ -1,0 +1,13 @@
+global using FluentValidation;
+global using MediatR;
+global using TaskManager.Shared.Application;
+global using TaskManager.Shared.Application.Caching;
+global using TaskManager.Shared.Domain;
+global using TaskManager.Shared.Domain.Results;
+global using TaskManager.Tasks.Application.Abstractions;
+global using TaskManager.Tasks.Application.Diagnostics;
+global using TaskManager.Tasks.Application.Features.Tasks;
+global using TaskManager.Tasks.Domain.Entities;
+global using TaskManager.Tasks.Domain.Enums;
+global using TaskManager.Tasks.Domain.Errors;
+global using TaskManager.Tasks.Domain.ValueObjects;

@@ -1,0 +1,10 @@
+global using Microsoft.Extensions.Time.Testing;
+global using NSubstitute;
+global using TaskManager.Auth.Application.Abstractions;
+global using TaskManager.Auth.Application.Features.Auth;
+global using TaskManager.Auth.Domain.Entities;
+global using TaskManager.Auth.Domain.Errors;
+global using TaskManager.Auth.UnitTests.Common;
+global using TaskManager.Shared.Application;
+global using TaskManager.Shared.Domain;
+global using TaskManager.Shared.Domain.Results;

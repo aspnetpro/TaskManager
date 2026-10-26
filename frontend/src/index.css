@@ -1,0 +1,28 @@
+@import 'tailwindcss';
+
+/* Tailwind 4: o tema mora no CSS (@theme), não em tailwind.config.ts. */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --color-navy-50: #eef3f8;
+  --color-navy-100: #d5e1ec;
+  --color-navy-700: #234b73;
+  --color-navy-800: #1a3c5e;
+  --color-navy-900: #122a42;
+  --color-accent-500: #3498db;
+  --color-accent-600: #2580bd;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 font-sans text-slate-900 antialiased;
+  }
+
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-accent-500;
+  }
+
+  dialog::backdrop {
+    background: rgb(15 23 42 / 0.4);
+  }
+}
